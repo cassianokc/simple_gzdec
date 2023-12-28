@@ -1,0 +1,46 @@
+#!/usr/bin/python3
+
+import re
+import sys
+import traceback
+import numpy as np
+
+regex = re.compile("\S+ \d\d:\d\d:(\S+).+](.+)")
+
+
+if "-stats" in sys.argv:
+    stats = True
+else:
+    stats = False
+
+oldts = 0
+ts = 0
+oldmsg = "Start"
+cnt = 0
+
+if stats:
+    data = []
+for line in sys.stdin:
+    try:
+        match = regex.match(line)
+        if match is not None:
+            ts = float(match.group(1))
+            msg = match.group(2)
+            if not stats:
+                print (f"{(1000*(ts-oldts)):2.4f} - {oldmsg}")
+            else:
+                if msg[:10] != oldmsg[:10]:
+                    data = []
+                data.append((ts-oldts)*1000)
+                if len(data) > 1000:
+                    data.pop(0)
+                sl = data[10:-10]
+                if (len(sl) > 1):
+                    print(f"Median: {np.median(sl):.4f} Max: {np.max(sl):.4f} Min: {np.min(sl):.4f}")
+            oldts = ts
+            oldmsg = msg
+
+    except:
+        traceback.print_exc()
+
+
