@@ -111,7 +111,7 @@ gst_gzdec_init (Gstgzdec * filter)
     filter->zstr.next_in = Z_NULL;
     int ret = inflateInit(&filter->zstr);
     if (ret != Z_OK)
-        g_print("Warning: Failed ZLIB inflateInit call");
+        g_print("Warning: Failed ZLIB inflateInit call\n");
 
 }
 
@@ -204,9 +204,8 @@ gst_gzdec_chain (GstPad * pad, GstObject * parent, GstBuffer * in_buf)
 
     gboolean ret_b;
     if (!gst_buffer_map(in_buf, &in_map, GST_MAP_WRITE|GST_MAP_READ)) {
-        g_print("Failed mapping buffer");
-    } else {
-        g_print("Failed mapping buffer");
+        g_print("Failed mapping buffer\n");
+        return GST_FLOW_ERROR;
     }
 
 
@@ -217,53 +216,32 @@ gst_gzdec_chain (GstPad * pad, GstObject * parent, GstBuffer * in_buf)
         sz = CHUNK > remaining_sz ? remaining_sz : CHUNK;
         if (!filter->silent) {
             g_print ("Remaining size: %lu\n", remaining_sz);
-            g_print ("size: %lu\n", sz);
-            for (int i=0; i<sz; i++)
-                g_print("%c", in_map.data[i]);
         }
         filter->zstr.next_in = &(in_map.data[offset]);
         filter->zstr.avail_in = sz;
         do {
             filter->zstr.avail_out = CHUNK;
             filter->zstr.next_out = chunk;
-            g_print ("Inflating");
-            ret = inflate(&filter->zstr, Z_NO_FLUSH);
-            if (ret != Z_OK) {
-                g_print("Failed inflating: %d\n", ret);
+            if (!filter->silent) {
+                g_print ("Inflating\n");
             }
-            switch (ret) {
-                case Z_NEED_DICT:
-                    g_print ("ZNEEDDICT");
-                    ret = Z_DATA_ERROR;     /* and fall through */
-                case Z_DATA_ERROR:
-                    g_print ("ZDATAERR");
-                case Z_MEM_ERROR:
-                    g_print ("ZMEMERR");
-                    (void)inflateEnd(&filter->zstr);
-                    return ret;
-                }
-
-            g_print ("Tmp buffer availout %u", filter->zstr.avail_out);
+            ret = inflate(&filter->zstr, Z_NO_FLUSH);
+            if (ret != Z_OK || ret != Z_FINISH) {
+                g_print("Failed inflating: %d\n", ret);
+                gst_buffer_unmap(in_buf, &in_map);
+                gst_buffer_unref(in_buf);
+                inflateEnd(&filter->zstr);
+                return GST_FLOW_ERROR;
+            }
             tmp_buf = gst_buffer_new_memdup(chunk, CHUNK - filter->zstr.avail_out);
-
-
-            g_print ("Cpy into");
             gst_buffer_copy_into(out_buf, tmp_buf, GST_BUFFER_COPY_MEMORY, 0, -1);
-            g_print ("Unref");
             gst_buffer_unref(tmp_buf);
-
         } while (filter->zstr.avail_out == 0);
-
         offset += sz;
         remaining_sz -= sz;
-
     } while (remaining_sz > 0);
-
-
     gst_buffer_unmap(in_buf, &in_map);
     gst_buffer_unref(in_buf);
-
-    /* just push out the incoming buffer without touching it */
     return gst_pad_push (filter->srcpad, out_buf);
 }
 
