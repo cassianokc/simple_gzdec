@@ -73,8 +73,9 @@ gst_gzdec_class_init (GstgzdecClass * klass)
 
     gst_element_class_set_details_simple (gstelement_class,
             "gzdec",
-            "FIXME:Generic",
-            "FIXME:Generic Template Element", "Cassiano Kleinert Casagrande <<user@hostname.org>>");
+            "gzdec",
+            "gzdec",
+            "Cassiano Kleinert Casagrande <<cassianokleinert@gmail.com>>");
 
     gst_element_class_add_pad_template (gstelement_class,
             gst_static_pad_template_get (&src_factory));
@@ -104,6 +105,7 @@ gst_gzdec_init (Gstgzdec * filter)
 
     filter->silent = FALSE;
 
+    // zlib setup for inflating
     filter->zstr.zalloc = Z_NULL;
     filter->zstr.zfree = Z_NULL;
     filter->zstr.opaque = Z_NULL;
@@ -111,7 +113,7 @@ gst_gzdec_init (Gstgzdec * filter)
     filter->zstr.next_in = Z_NULL;
     int ret = inflateInit(&filter->zstr);
     if (ret != Z_OK)
-        g_print("Warning: Failed ZLIB inflateInit call\n");
+        g_print("Failed ZLIB inflateInit call\n");
 
 }
 
@@ -190,27 +192,24 @@ gst_gzdec_chain (GstPad * pad, GstObject * parent, GstBuffer * in_buf)
     Gstgzdec *filter;
     filter = GST_GZDEC (parent);
 
-    gsize buf_sz = gst_buffer_get_size(in_buf);
-    gsize remaining_sz = buf_sz;
+    gsize buf_sz = gst_buffer_get_size(in_buf); // total input buffer size
+    gsize remaining_sz = buf_sz;                // stores how much of the buffer still needs to be processed
     gsize offset = 0, sz;
 
     if (!filter->silent) {
         g_print ("Buffer size: %lu\n", buf_sz);
     }
 
-    GstMapInfo in_map;
-    GstBuffer *out_buf = gst_buffer_new();
-    GstBuffer *tmp_buf;
+    GstMapInfo in_map;                          // mapping to access input buffer values
+    GstBuffer *out_buf = gst_buffer_new();      // buffer that will contain full output
+    GstBuffer *tmp_buf;                         // temporary buffer that contains output for each chunk
+    uint8_t chunk[CHUNK];
+    int ret;
 
-    gboolean ret_b;
-    if (!gst_buffer_map(in_buf, &in_map, GST_MAP_WRITE|GST_MAP_READ)) {
+    if (!gst_buffer_map(in_buf, &in_map, GST_MAP_READ)) {
         g_print("Failed mapping buffer\n");
         return GST_FLOW_ERROR;
     }
-
-
-    uint8_t chunk[CHUNK];
-    int ret;
 
     do {
         sz = CHUNK > remaining_sz ? remaining_sz : CHUNK;
@@ -226,7 +225,7 @@ gst_gzdec_chain (GstPad * pad, GstObject * parent, GstBuffer * in_buf)
                 g_print ("Inflating\n");
             }
             ret = inflate(&filter->zstr, Z_NO_FLUSH);
-            if (ret != Z_OK || ret != Z_FINISH) {
+            if (ret != Z_OK && ret != Z_STREAM_END) {
                 g_print("Failed inflating: %d\n", ret);
                 gst_buffer_unmap(in_buf, &in_map);
                 gst_buffer_unref(in_buf);
@@ -236,10 +235,10 @@ gst_gzdec_chain (GstPad * pad, GstObject * parent, GstBuffer * in_buf)
             tmp_buf = gst_buffer_new_memdup(chunk, CHUNK - filter->zstr.avail_out);
             gst_buffer_copy_into(out_buf, tmp_buf, GST_BUFFER_COPY_MEMORY, 0, -1);
             gst_buffer_unref(tmp_buf);
-        } while (filter->zstr.avail_out == 0);
+        } while (filter->zstr.avail_out == 0);           // tests whether input chunk was fully processed
         offset += sz;
         remaining_sz -= sz;
-    } while (remaining_sz > 0);
+    } while (remaining_sz > 0);                          // tests whether full input buffer was fully processed
     gst_buffer_unmap(in_buf, &in_map);
     gst_buffer_unref(in_buf);
     return gst_pad_push (filter->srcpad, out_buf);
@@ -257,7 +256,7 @@ static gboolean gzdec_init (GstPlugin * gzdec)
      * exchange the string 'Template gzdec' with your description
      */
     GST_DEBUG_CATEGORY_INIT (gst_gzdec_debug, "gzdec",
-            0, "Template gzdec");
+            0, "gzdec");
 
     return GST_ELEMENT_REGISTER (gzdec, gzdec);
 }
@@ -268,7 +267,7 @@ static gboolean gzdec_init (GstPlugin * gzdec)
  * compile this code. GST_PLUGIN_DEFINE needs PACKAGE to be defined.
  */
 #ifndef PACKAGE
-#define PACKAGE "myfirstgzdec"
+#define PACKAGE "gzdec"
 #endif
 
 /* gstreamer looks for this structure to register gzdecs

@@ -9,11 +9,11 @@
 
 #define GST_LICENSE "LGPL"
 
-#define GST_PACKAGE_NAME "GStreamer template Plug-ins"
+#define GST_PACKAGE_NAME "GStreamer gz decoder"
 
-#define GST_PACKAGE_ORIGIN "https://gstreamer.freedesktop.org"
+#define GST_PACKAGE_ORIGIN "cassianokleinert@gmail.com"
 
-#define PACKAGE "gst-template-plugin"
+#define PACKAGE "gzdec"
 
 #define PACKAGE_VERSION "1.19.0.1"
 
